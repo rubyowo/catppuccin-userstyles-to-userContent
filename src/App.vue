@@ -31,11 +31,6 @@ watchEffect(() => set(mode, get(state)));
 const darkFlavor = useStorage<FlavorName>('darkFlavor', 'mocha');
 const lightFlavor = useStorage<FlavorName>('lightFlavor', 'latte');
 const accentColor = useStorage<AccentName>('accentColor', 'mauve');
-const vars = {
-	darkFlavor: get(darkFlavor),
-	lightFlavor: get(lightFlavor),
-	accentColor: get(accentColor),
-};
 
 const [settings, ...userstyles] = rawUserstylesImport as [
 	SettingsEntry,
@@ -50,23 +45,29 @@ async function createCustomUserstylesImport() {
 				// Use the default options for the variables and override them if specified by the user
 				// TODO: Uncurse this 💀
 				const newVars = Object.assign(
-					{},
 					...Object.values(userstyle.usercssData.vars).map((v) => {
 						return { [v.name]: v.default };
 					}),
-					vars,
+					{
+						darkFlavor: get(darkFlavor),
+						lightFlavor: get(lightFlavor),
+						accentColor: get(accentColor),
+					},
 				);
+
 				// Create LESS variables based on the stylus variable options
 				const varDefs = Object.entries(newVars)
-					.map((entry) => `@${entry[0]}:${entry[1]};`)
+					.map(([key, value]) => `@${key}:${value};`)
 					.join('\n');
+
 				const newSourceCode = (
 					await less.render(varDefs + userstyle.sourceCode)
 				).css
-					// Haha
-					.replaceAll(';', '!important;')
-					// Oh. Oh no.
-					.replaceAll('!important!important', ' !important');
+					// Haha wow... this is horrible...
+					// HACK: putting css in userContent.css has the lowest priority (user-agent) so add !important to reverse the priority
+					.replaceAll('!important', '')
+					.replaceAll(';', ' !important;');
+
 				return newSourceCode;
 			} catch (e) {
 				console.error(
@@ -109,8 +110,6 @@ async function download() {
 		set(downloaded, false);
 	}, 1000);
 }
-
-// await createCustomUserstylesImport()
 </script>
 
 <template>
