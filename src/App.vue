@@ -5,7 +5,7 @@ import rawUserstylesImport from '../import.json' with { type: 'json' };
 
 import { get, set } from '@vueuse/core';
 import { flavorEntries, flavors } from '@catppuccin/palette';
-import less from "less";
+import less from 'less';
 
 const accentEntries = flavors.latte.colorEntries.filter(
 	([_, { accent }]) => accent,
@@ -31,7 +31,11 @@ watchEffect(() => set(mode, get(state)));
 const darkFlavor = useStorage<FlavorName>('darkFlavor', 'mocha');
 const lightFlavor = useStorage<FlavorName>('lightFlavor', 'latte');
 const accentColor = useStorage<AccentName>('accentColor', 'mauve');
-const vars = {"darkFlavor": get(darkFlavor), "lightFlavor": get(lightFlavor), "accentColor": get(accentColor)}
+const vars = {
+	darkFlavor: get(darkFlavor),
+	lightFlavor: get(lightFlavor),
+	accentColor: get(accentColor),
+};
 
 const [settings, ...userstyles] = rawUserstylesImport as [
 	SettingsEntry,
@@ -42,13 +46,36 @@ async function createCustomUserstylesImport() {
 	const customSelectedUserstyles = userstyles
 		.filter(({ name }) => get(selectedUserstyles)[name])
 		.map(async (userstyle) => {
-			const newVars = Object.assign({}, ...Object.values(userstyle.usercssData.vars).map(v => {return {[v.name]: v.default}}), vars)
-			const varDefs = Object.entries(newVars).map(entry => `@${entry[0]}:${entry[1]};`).join("\n")
-			const newSourceCode = (await less.render(varDefs + userstyle.sourceCode)).css.replaceAll(";", "!important;").replaceAll("!important!important", " !important")
-			return newSourceCode;
+			try {
+				// Use the default options for the variables and override them if specified by the user
+				// TODO: Uncurse this 💀
+				const newVars = Object.assign(
+					{},
+					...Object.values(userstyle.usercssData.vars).map((v) => {
+						return { [v.name]: v.default };
+					}),
+					vars,
+				);
+				// Create LESS variables based on the stylus variable options
+				const varDefs = Object.entries(newVars)
+					.map((entry) => `@${entry[0]}:${entry[1]};`)
+					.join('\n');
+				const newSourceCode = (
+					await less.render(varDefs + userstyle.sourceCode)
+				).css
+					// Haha
+					.replaceAll(';', '!important;')
+					// Oh. Oh no.
+					.replaceAll('!important!important', ' !important');
+				return newSourceCode;
+			} catch (e) {
+				console.error(
+					`Errored while rendering ${userstyle.name}: ${e}`,
+				);
+			}
 		});
 
-	return (await Promise.all(customSelectedUserstyles)).join("\n\n");
+	return (await Promise.all(customSelectedUserstyles)).join('\n\n');
 }
 
 const searchText = ref('');
@@ -69,7 +96,7 @@ const downloaded = ref(false);
 
 async function download() {
 	const blob = new Blob([await createCustomUserstylesImport()], {
-		type: 'application/json',
+		type: 'text/css',
 	});
 	const href = URL.createObjectURL(blob);
 	const link = document.createElement('a');
