@@ -5,6 +5,7 @@ import rawUserstylesImport from '../import.json' with { type: 'json' };
 
 import { get, set } from '@vueuse/core';
 import { flavorEntries, flavors } from '@catppuccin/palette';
+import less from "less";
 
 const accentEntries = flavors.latte.colorEntries.filter(
 	([_, { accent }]) => accent,
@@ -30,24 +31,24 @@ watchEffect(() => set(mode, get(state)));
 const darkFlavor = useStorage<FlavorName>('darkFlavor', 'mocha');
 const lightFlavor = useStorage<FlavorName>('lightFlavor', 'latte');
 const accentColor = useStorage<AccentName>('accentColor', 'mauve');
+const vars = {"darkFlavor": get(darkFlavor), "lightFlavor": get(lightFlavor), "accentColor": get(accentColor)}
 
 const [settings, ...userstyles] = rawUserstylesImport as [
 	SettingsEntry,
 	UserstyleEntry,
 ];
 
-function createCustomUserstylesImport() {
+async function createCustomUserstylesImport() {
 	const customSelectedUserstyles = userstyles
 		.filter(({ name }) => get(selectedUserstyles)[name])
-		.map((userstyle) => {
-			userstyle.usercssData.vars.accentColor.value = get(accentColor);
-			userstyle.usercssData.vars.darkFlavor.value = get(darkFlavor);
-			userstyle.usercssData.vars.lightFlavor.value = get(lightFlavor);
-
-			return userstyle;
+		.map(async (userstyle) => {
+			const newVars = Object.assign({}, ...Object.values(userstyle.usercssData.vars).map(v => {return {[v.name]: v.default}}), vars)
+			const varDefs = Object.entries(newVars).map(entry => `@${entry[0]}:${entry[1]};`).join("\n")
+			const newSourceCode = (await less.render(varDefs + userstyle.sourceCode)).css.replaceAll(";", "!important;").replaceAll("!important!important", " !important")
+			return newSourceCode;
 		});
 
-	return JSON.stringify([settings, ...customSelectedUserstyles]);
+	return (await Promise.all(customSelectedUserstyles)).join("\n\n");
 }
 
 const searchText = ref('');
@@ -66,14 +67,14 @@ function getFilteredUserstyles() {
 
 const downloaded = ref(false);
 
-function download() {
-	const blob = new Blob([createCustomUserstylesImport()], {
+async function download() {
+	const blob = new Blob([await createCustomUserstylesImport()], {
 		type: 'application/json',
 	});
 	const href = URL.createObjectURL(blob);
 	const link = document.createElement('a');
 	link.href = href;
-	link.download = 'import.json';
+	link.download = 'userContent.css';
 	link.click();
 	URL.revokeObjectURL(href);
 	set(downloaded, true);
@@ -81,6 +82,8 @@ function download() {
 		set(downloaded, false);
 	}, 1000);
 }
+
+// await createCustomUserstylesImport()
 </script>
 
 <template>
